@@ -358,6 +358,26 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(srcWatchOnChangeDisposable);
 
+  const buildWatcher = vscode.workspace.createFileSystemWatcher(
+    ".bin_timestamp",
+    true,
+    false,
+    true
+  );
+
+  const buildWatcherDisposable = buildWatcher.onDidChange(async (e) => {
+    const buildDirPath = idfConf.readParameter(
+      "idf.buildPath",
+      workspaceRoot
+    ) as string;
+    const qemuBinPath = path.join(buildDirPath, "merged_qemu.bin");
+    const qemuBinExists = await pathExists(qemuBinPath);
+    if (qemuBinExists) {
+      vscode.workspace.fs.delete(vscode.Uri.file(qemuBinPath));
+    }
+  });
+  context.subscriptions.push(buildWatcherDisposable);
+
   vscode.workspace.onDidChangeWorkspaceFolders(async (e) => {
     if (PreCheck.isWorkspaceFolderOpen()) {
       for (const ws of e.removed) {
@@ -2406,7 +2426,7 @@ export async function activate(context: vscode.ExtensionContext) {
         qemuManager.stop();
         await utils.sleep(1000);
       }
-      qemuManager.configureWithDefValues();
+      qemuManager.configureWithDefValues(workspaceRoot);
       qemuManager.start();
       const gdbPath = await utils.getToolchainPath(workspaceRoot, "gdb");
       const workspaceFolder = vscode.workspace.getWorkspaceFolder(
@@ -3939,21 +3959,21 @@ function createQemuMonitor(
     if (isQemuLaunched) {
       qemuManager.stop();
     }
+    const buildDirPath = idfConf.readParameter(
+      "idf.buildPath",
+      workspaceRoot
+    ) as string;
+    const qemuBinExists = await pathExists(
+      path.join(buildDirPath, "merged_qemu.bin")
+    );
+    if (!qemuBinExists) {
+      await mergeFlashBinaries(workspaceRoot);
+    }
     const qemuTcpPort = idfConf.readParameter(
       "idf.qemuTcpPort",
       workspaceRoot
-    ) as number;
-    qemuManager.configure({
-      launchArgs: [
-        "-nographic",
-        "-machine",
-        "esp32",
-        "-drive",
-        "file=build/merged_qemu.bin,if=mtd,format=raw",
-        "-monitor stdio",
-        `-serial tcp::${qemuTcpPort},server,nowait`,
-      ],
-    } as IQemuOptions);
+    ) as string;
+    qemuManager.configureForMonitor(workspaceRoot, qemuTcpPort);
     qemuManager.start();
     const serialPort = `socket://localhost:${qemuTcpPort}`;
     const idfMonitor = await createNewIdfMonitor(

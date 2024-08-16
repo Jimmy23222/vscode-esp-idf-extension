@@ -45,7 +45,6 @@ export class QemuManager extends EventEmitter {
     return QemuManager.instance;
   }
   private static instance: QemuManager;
-  private execString = "qemu-system-xtensa";
   private qemuTerminal: Terminal;
   private options: IQemuOptions;
   private _statusBarItem: StatusBarItem;
@@ -115,20 +114,50 @@ export class QemuManager extends EventEmitter {
     this.registerQemuStatusBarItem();
   }
 
-  public configureWithDefValues() {
+  public configureForMonitor(workspace: Uri, qemuTcpPort: string) {
+    const idfTarget = readParameter("idf.adapterTargetName", workspace) as string;
+    const buildPath = readParameter(
+      "idf.buildPath",
+      workspace
+    ) as string;
+    const qemuFile = Uri.joinPath(Uri.file(buildPath), "merged_qemu.bin");
+    this.configure({
+      launchArgs: [
+        "-nographic",
+        "-machine",
+        idfTarget,
+        "-drive",
+        `file=${qemuFile.fsPath},if=mtd,format=raw`,
+        "-monitor stdio",
+        `-serial tcp::${qemuTcpPort},server,nowait`,
+      ],
+      tcpPort: qemuTcpPort,
+      workspaceFolder: workspace
+    } as IQemuOptions);
+  }
+
+  public configureWithDefValues(curWorkspace?: Uri) {
     let workspaceFolder: Uri;
-    if (PreCheck.isWorkspaceFolderOpen()) {
+    if (!curWorkspace && PreCheck.isWorkspaceFolderOpen()) {
       workspaceFolder = workspace.workspaceFolders[0].uri;
+    } else {
+      workspaceFolder = curWorkspace;
     }
+    const idfTarget = readParameter("idf.adapterTargetName", workspaceFolder) as string;
+    const buildPath = readParameter(
+      "idf.buildPath",
+      workspaceFolder
+    ) as string;
+    const qemuFile = Uri.joinPath(Uri.file(buildPath), "merged_qemu.bin");
     const defOptions = {
       launchArgs: [
         "-nographic",
         "-s",
         "-S",
         "-machine",
-        "esp32",
+        idfTarget,
         "-drive",
-        "file=build/merged_qemu.bin,if=mtd,format=raw",
+        `file=${qemuFile.fsPath},if=mtd,format=raw`
       ],
       tcpPort: readParameter("idf.qemuTcpPort", workspaceFolder),
       workspaceFolder,
@@ -162,13 +191,24 @@ export class QemuManager extends EventEmitter {
       return;
     }
     const modifiedEnv = appendIdfAndToolsToPath(this.options.workspaceFolder);
+    const qemuExecutable =
+      modifiedEnv.IDF_TARGET === "esp32"
+        ? "qemu-system-xtensa"
+        : modifiedEnv.IDF_TARGET === "esp32c3"
+        ? "qemu-system-riscv32"
+        : "";
+    if (!qemuExecutable) {
+      throw new Error(
+        `Current IDF_TARGET ${modifiedEnv.IDF_TARGET} is not supported in Espressif QEMU. Only esp32 or esp32c3`
+      );
+    }
     const isQemuBinInPath = await isBinInPath(
-      this.execString,
+      qemuExecutable,
       this.options.workspaceFolder.fsPath,
       modifiedEnv
     );
     if (!isQemuBinInPath) {
-      throw new Error("qemu-system-xtensa is not in PATH or access is denied");
+      throw new Error(`${qemuExecutable} is not found in PATH or access is denied`);
     }
     if (typeof this.options === "undefined") {
       throw new Error("No QEMU options found.");
@@ -206,7 +246,7 @@ export class QemuManager extends EventEmitter {
         }
       });
     }
-    this.qemuTerminal.sendText(`${this.execString} ${qemuArgs.join(" ")}`);
+    this.qemuTerminal.sendText(`${qemuExecutable} ${qemuArgs.join(" ")}`);
     this.qemuTerminal.show(true);
     this.updateStatusText("❇️ ESP-IDF: QEMU Server (Running)");
   }
