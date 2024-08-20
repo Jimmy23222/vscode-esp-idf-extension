@@ -425,11 +425,12 @@ export async function activate(context: vscode.ExtensionContext) {
     false,
     false
   );
-  const updateGuiValues = (e: vscode.Uri) => {
+  const updateGuiValues = async (e: vscode.Uri) => {
     if (ConfserverProcess.exists() && !ConfserverProcess.isSavedByUI()) {
       ConfserverProcess.loadGuiConfigValues();
     }
     ConfserverProcess.resetSavedByUI();
+    await getIdfTargetFromSdkconfig(workspaceRoot, statusBarItems["target"]);
   };
   const sdkCreateWatchDisposable = sdkconfigWatcher.onDidCreate(
     updateGuiValues
@@ -1105,24 +1106,6 @@ export async function activate(context: vscode.ExtensionContext) {
           statusBarItems[statusItem] = undefined;
         }
       }
-    } else if (e.affectsConfiguration("idf.adapterTargetName")) {
-      let idfTarget = idfConf.readParameter(
-        "idf.adapterTargetName",
-        workspaceRoot
-      ) as string;
-      if (idfTarget === "custom") {
-        idfTarget = idfConf.readParameter(
-          "idf.customAdapterTargetName",
-          workspaceRoot
-        ) as string;
-      }
-      const debugAdapterConfig = {
-        target: idfTarget,
-      } as IDebugAdapterConfig;
-      debugAdapterManager.configureAdapter(debugAdapterConfig);
-      if (statusBarItems && statusBarItems["target"]) {
-        statusBarItems["target"].text = "$(chip) " + idfTarget;
-      }
     } else if (e.affectsConfiguration("idf.espIdfPath" + winFlag)) {
       ESP.URL.Docs.IDF_INDEX = undefined;
     } else if (e.affectsConfiguration("idf.qemuTcpPort")) {
@@ -1133,24 +1116,6 @@ export async function activate(context: vscode.ExtensionContext) {
       if (statusBarItems && statusBarItems["port"]) {
         statusBarItems["port"].text =
           "$(plug) " + idfConf.readParameter("idf.port", workspaceRoot);
-      }
-    } else if (e.affectsConfiguration("idf.customAdapterTargetName")) {
-      let idfTarget = idfConf.readParameter(
-        "idf.adapterTargetName",
-        workspaceRoot
-      ) as string;
-      if (idfTarget === "custom") {
-        idfTarget = idfConf.readParameter(
-          "idf.customAdapterTargetName",
-          workspaceRoot
-        ) as string;
-        const debugAdapterConfig = {
-          target: idfTarget,
-        } as IDebugAdapterConfig;
-        debugAdapterManager.configureAdapter(debugAdapterConfig);
-        if (statusBarItems && statusBarItems["target"]) {
-          statusBarItems["target"].text = "$(chip) " + idfTarget;
-        }
       }
     } else if (e.affectsConfiguration("idf.flashType")) {
       let flashType = idfConf.readParameter(
@@ -2017,8 +1982,8 @@ export async function activate(context: vscode.ExtensionContext) {
             progress,
             workspaceRoot
           );
-          if (!newProjectArgs || !newProjectArgs.targetList) {
-            throw new Error("Could not find ESP-IDF Targets");
+          if (!newProjectArgs || !newProjectArgs.boards) {
+            throw new Error("Could not get ESP-IDF: New project arguments");
           }
           NewProjectPanel.createOrShow(context.extensionPath, newProjectArgs);
         } catch (error) {
@@ -2053,15 +2018,10 @@ export async function activate(context: vscode.ExtensionContext) {
   registerIDFCommand("espIdf.selectOpenOcdConfigFiles", async () => {
     try {
       const openOcdScriptsPath = await getOpenOcdScripts(workspaceRoot);
-      let idfTarget = idfConf.readParameter(
-        "idf.adapterTargetName",
-        workspaceRoot
-      ) as string;
-      if (idfTarget === "custom") {
-        idfTarget = idfConf.readParameter(
-          "idf.customAdapterTargetName",
-          workspaceRoot
-        ) as string;
+      let idfTarget = await getIdfTargetFromSdkconfig(workspaceRoot);
+      if (!idfTarget) {
+        vscode.commands.executeCommand("espIdf.setTarget");
+        return;
       }
       const boards = await getBoards(openOcdScriptsPath, idfTarget);
       const choices = boards.map((b) => {
@@ -2105,11 +2065,6 @@ export async function activate(context: vscode.ExtensionContext) {
       await idfConf.writeParameter(
         "idf.openOcdConfigs",
         selectedBoard.target.configFiles,
-        target
-      );
-      await idfConf.writeParameter(
-        "idf.adapterTargetName",
-        selectedBoard.target.target,
         target
       );
       Logger.infoNotify(
@@ -2973,15 +2928,10 @@ export async function activate(context: vscode.ExtensionContext) {
           "idf.buildPath",
           workspaceRoot
         ) as string;
-        let idfTarget = idfConf.readParameter(
-          "idf.adapterTargetName",
-          workspaceRoot
-        );
-        if (idfTarget === "custom") {
-          idfTarget = idfConf.readParameter(
-            "idf.customAdapterTargetName",
-            workspaceRoot
-          );
+        let idfTarget = await getIdfTargetFromSdkconfig(workspaceRoot);
+        if (!idfTarget) {
+          Logger.infoNotify("IDF_TARGET is not defined.");
+          return;
         }
         const toolchainPrefix = utils.getToolchainToolName(idfTarget, "");
         const projectName = await getProjectName(buildDirPath);
@@ -3723,7 +3673,7 @@ async function createCmdsStatusBarItems() {
         : undefined;
   }
   const port = idfConf.readParameter("idf.port", workspaceRoot) as string;
-  let idfTarget = idfConf.readParameter("idf.adapterTargetName", workspaceRoot);
+  let idfTarget = await getIdfTargetFromSdkconfig(workspaceRoot);
   let flashType = idfConf.readParameter(
     "idf.flashType",
     workspaceRoot
@@ -3731,12 +3681,6 @@ async function createCmdsStatusBarItems() {
   let projectConf = ESP.ProjectConfiguration.store.get<string>(
     ESP.ProjectConfiguration.SELECTED_CONFIG
   );
-  if (idfTarget === "custom") {
-    idfTarget = idfConf.readParameter(
-      "idf.customAdapterTargetName",
-      workspaceRoot
-    );
-  }
   let currentIdfVersion = await getCurrentIdfSetup(workspaceRoot, false);
   const statusBarItems: { [key: string]: vscode.StatusBarItem } = {};
 

@@ -23,7 +23,7 @@ import * as utils from "../../utils";
 import { BuildTask } from "../../build/buildTask";
 import { Logger } from "../../logger/logger";
 import { R_OK } from "constants";
-import { getProjectName } from "../../workspaceConfig";
+import { getIdfTargetFromSdkconfig, getProjectName } from "../../workspaceConfig";
 import { IDFMonitor } from ".";
 import { getVirtualEnvPythonPath } from "../../pythonManager";
 
@@ -77,10 +77,7 @@ export async function createNewIdfMonitor(
     "idf.buildPath",
     workspaceFolder
   ) as string;
-  let idfTarget = readParameter("idf.adapterTargetName", workspaceFolder);
-  if (idfTarget === "custom") {
-    idfTarget = readParameter("idf.customAdapterTargetName", workspaceFolder);
-  }
+  let idfTarget = await getIdfTargetFromSdkconfig(workspaceFolder);
   const projectName = await getProjectName(buildDirPath);
   const elfFilePath = join(buildDirPath, `${projectName}.elf`);
   const toolchainPrefix = utils.getToolchainToolName(idfTarget, "");
