@@ -160,5 +160,4 @@
   "Wait for ESP-IDF build or flash to finish": "等待 ESP-IDF 构建或刷新完成",
   "Target {0} Set Successfully.": "目标 {0} 设置成功",
   "Unknown error occurred while setting IDF target.": "设置 IDF 目标时发生未知错误"
-
 }
