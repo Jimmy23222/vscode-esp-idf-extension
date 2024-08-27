@@ -136,19 +136,7 @@ export async function setIdfTarget(
             workspaceFolder.uri
           );
         }
-
-        const isTargetSet = await setTargetInIDF(
-          workspaceFolder,
-          selectedTarget
-        );
-        if (isTargetSet) {
-          const msg = l10n.t(
-            "Target {0} Set Successfully.",
-            selectedTarget.target.toLocaleUpperCase()
-          );
-          OutputChannel.appendLineAndShow(msg, "Set Target");
-          Logger.infoNotify(msg);
-        }
+        await setTargetInIDF(workspaceFolder, selectedTarget);
       } catch (err) {
         const errMsg =
           err instanceof Error
