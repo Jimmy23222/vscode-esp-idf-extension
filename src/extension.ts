@@ -208,7 +208,7 @@ let wsServer: WSServer;
 
 const openFolderFirstMsg = vscode.l10n.t("Open a folder first.");
 const cmdNotForWebIdeMsg = vscode.l10n.t(
-  "Selected command is not available in WebIDE"
+  "Selected command is not available in Web"
 );
 const openFolderCheck = [
   PreCheck.isWorkspaceFolderOpen,
@@ -821,7 +821,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   registerIDFCommand("espIdf.selectCurrentIdfVersion", () => {
-    PreCheck.perform([webIdeCheck, openFolderCheck], async () => {
+    PreCheck.perform([openFolderCheck], async () => {
       const currentIdfSetup = await selectIdfSetup(
         workspaceRoot,
         statusBarItems["currentIdfVersion"]
@@ -3752,12 +3752,14 @@ async function createCmdsStatusBarItems() {
     102
   );
 
-  statusBarItems["port"] = createStatusBarItem(
-    "$(plug)" + port,
-    vscode.l10n.t("ESP-IDF: Select Port to Use (COM, tty, usbserial)"),
-    "espIdf.selectPort",
-    101
-  );
+  if (vscode.env.uiKind !== vscode.UIKind.Web) {
+    statusBarItems["port"] = createStatusBarItem(
+      "$(plug)" + port,
+      vscode.l10n.t("ESP-IDF: Select Port to Use (COM, tty, usbserial)"),
+      "espIdf.selectPort",
+      101
+    );
+  }
 
   if (projectConf) {
     statusBarItems["projectConf"] = createStatusBarItem(
@@ -3798,12 +3800,14 @@ async function createCmdsStatusBarItems() {
     "espIdf.buildDevice",
     95
   );
-  statusBarItems["flashType"] = createStatusBarItem(
-    `$(star-empty) ${flashType}`,
-    vscode.l10n.t("ESP-IDF: Select Flash Method"),
-    "espIdf.selectFlashMethodAndFlash",
-    94
-  );
+  if (vscode.env.uiKind !== vscode.UIKind.Web) {
+    statusBarItems["flashType"] = createStatusBarItem(
+      `$(star-empty) ${flashType}`,
+      vscode.l10n.t("ESP-IDF: Select Flash Method"),
+      "espIdf.selectFlashMethodAndFlash",
+      94
+    );
+  }
   statusBarItems["flash"] = createStatusBarItem(
     `$(zap)`,
     vscode.l10n.t("ESP-IDF: Flash Device"),
@@ -3816,18 +3820,20 @@ async function createCmdsStatusBarItems() {
     "espIdf.monitorDevice",
     92
   );
-  statusBarItems["debug"] = createStatusBarItem(
-    "$(debug-alt)",
-    vscode.l10n.t("ESP-IDF: Debug"),
-    "espIdf.debug",
-    91
-  );
-  statusBarItems["buildFlashMonitor"] = createStatusBarItem(
-    "$(flame)",
-    vscode.l10n.t("ESP-IDF: Build, Flash and Monitor"),
-    "espIdf.buildFlashMonitor",
-    90
-  );
+  if (vscode.env.uiKind !== vscode.UIKind.Web) {
+    statusBarItems["debug"] = createStatusBarItem(
+      "$(debug-alt)",
+      vscode.l10n.t("ESP-IDF: Debug"),
+      "espIdf.debug",
+      91
+    );
+    statusBarItems["buildFlashMonitor"] = createStatusBarItem(
+      "$(flame)",
+      vscode.l10n.t("ESP-IDF: Build, Flash and Monitor"),
+      "espIdf.buildFlashMonitor",
+      90
+    );
+  }
   statusBarItems["terminal"] = createStatusBarItem(
     "$(terminal)",
     vscode.l10n.t("ESP-IDF: Open ESP-IDF Terminal"),
@@ -3894,7 +3900,12 @@ const flash = (
   encryptPartition: boolean = false,
   flashType?: ESP.FlashType
 ) => {
-  PreCheck.perform([webIdeCheck, openFolderCheck], async () => {
+  PreCheck.perform([openFolderCheck], async () => {
+    // Re route to ESP-IDF Web extension if using Codespaces or Browser
+    if (vscode.env.uiKind === vscode.UIKind.Web) {
+      vscode.commands.executeCommand("esp-idf-web.flash");
+      return;
+    }
     const notificationMode = idfConf.readParameter(
       "idf.notificationMode",
       workspaceRoot
@@ -4112,7 +4123,7 @@ async function startFlashing(
 }
 
 function createIdfTerminal() {
-  PreCheck.perform([webIdeCheck, openFolderCheck], () => {
+  PreCheck.perform([openFolderCheck], () => {
     const modifiedEnv = utils.appendIdfAndToolsToPath(workspaceRoot);
     const espIdfTerminal = vscode.window.createTerminal({
       name: "ESP-IDF Terminal",
@@ -4127,7 +4138,12 @@ function createIdfTerminal() {
 }
 
 function createMonitor() {
-  PreCheck.perform([webIdeCheck, openFolderCheck], async () => {
+  PreCheck.perform([openFolderCheck], async () => {
+    // Re route to ESP-IDF Web extension if using Codespaces or Browser
+    if (vscode.env.uiKind === vscode.UIKind.Web) {
+      vscode.commands.executeCommand("esp-idf-web.monitor");
+      return;
+    }
     const noReset = idfConf.readParameter(
       "idf.monitorNoReset",
       workspaceRoot
